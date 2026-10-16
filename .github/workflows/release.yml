@@ -215,13 +215,23 @@ jobs:
           echo "LD_LIBRARY_PATH=$LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
           sudo cp -vL "$LIBDIR"/libtranscribe.so* "$LIBDIR"/libggml*.so* /usr/local/lib/
           sudo ldconfig
-      - name: Build installers
+      - name: Build installers (macOS and Linux)
+        if: runner.os != 'Windows'
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
           BUNDLES: ${{ matrix.bundles }}
           APPLE_SIGNING_IDENTITY: "-"
         run: bun run tauri build --target "$TARGET" --bundles "$BUNDLES"
+      - name: Build installers (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+          BUNDLES: ${{ matrix.bundles }}
+        run: |
+          bun run tauri build --target $env:TARGET --bundles $env:BUNDLES
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Collect installers
         shell: bash
         env:
