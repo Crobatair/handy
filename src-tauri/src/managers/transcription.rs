@@ -123,6 +123,9 @@ struct FinalizedStreamText {
 /// directly, so a frame with no stream pending costs a single relaxed atomic
 /// load — no Tauri state lookup, no mutex lock.
 pub struct StreamRouter {
+    workspace_session: Mutex<Option<String>>,
+    cloud: Mutex<Option<tokio::sync::mpsc::Sender<Vec<f32>>>>,
+    cloud_failed: AtomicBool,
     /// Command channel to the active streaming worker, present from
     /// `start_stream` until `finalize_stream`/`cancel_stream`.
     tx: Mutex<Option<mpsc::Sender<StreamCmd>>>,
@@ -135,6 +138,9 @@ impl StreamRouter {
     fn new() -> Self {
         Self {
             tx: Mutex::new(None),
+            workspace_session: Mutex::new(None),
+            cloud: Mutex::new(None),
+            cloud_failed: AtomicBool::new(false),
             open: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -166,12 +172,34 @@ impl StreamRouter {
     /// Forward a 16 kHz frame to the active streaming worker. Cheap no-op (a
     /// single relaxed atomic load) when no stream is pending.
     pub fn feed(&self, frame: &[f32]) {
+        if let Some(tx) = self.cloud.lock().unwrap().as_ref() {
+            if tx.try_send(frame.to_vec()).is_err() {
+                self.cloud_failed.store(true, Ordering::Release);
+            }
+        }
         if !self.open.load(Ordering::Relaxed) {
             return;
         }
         if let Some(tx) = self.tx.lock().unwrap().as_ref() {
             let _ = tx.send(StreamCmd::Feed(frame.to_vec()));
         }
+    }
+
+    pub fn set_workspace_session(&self, id: Option<String>) {
+        *self.workspace_session.lock().unwrap() = id;
+    }
+
+    pub fn workspace_session(&self) -> Option<String> {
+        self.workspace_session.lock().unwrap().clone()
+    }
+
+    pub fn set_cloud(&self, tx: Option<tokio::sync::mpsc::Sender<Vec<f32>>>) {
+        *self.cloud.lock().unwrap() = tx;
+        self.cloud_failed.store(false, Ordering::Release);
+    }
+
+    pub fn cloud_failed(&self) -> bool {
+        self.cloud_failed.load(Ordering::Acquire)
     }
 
     /// Whether a stream is pending or active.
@@ -1527,6 +1555,21 @@ struct RunOutcome {
 }
 
 fn emit_stream_text(app_handle: &AppHandle, committed: &str, tentative: &str) {
+    // Native session-tagged events connect local streaming to the workspace;
+    // the existing typed event remains available to Handy's recording overlay.
+    if let Some(tm) = app_handle.try_state::<Arc<TranscriptionManager>>() {
+        if let Some(session_id) = tm.stream_router().workspace_session() {
+            let _ = app_handle.emit(
+                "synapse-transcript",
+                crate::synapse::TranscriptEvent {
+                    session_id,
+                    committed: committed.to_string(),
+                    tentative: tentative.to_string(),
+                },
+            );
+        }
+    }
+
     let _ = StreamTextEvent {
         committed: committed.to_string(),
         tentative: tentative.to_string(),

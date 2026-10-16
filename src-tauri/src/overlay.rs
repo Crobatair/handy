@@ -55,7 +55,9 @@ const OVERLAY_STREAM_HEIGHT: f64 = 120.0;
 
 /// Overlay window size (logical) for a given UI state.
 fn overlay_dimensions(state: &str) -> (f64, f64) {
-    if state == "streaming" {
+    if state == "synapse" {
+        (640.0, 360.0)
+    } else if state == "streaming" {
         (OVERLAY_STREAM_WIDTH, OVERLAY_STREAM_HEIGHT)
     } else {
         (OVERLAY_WIDTH, OVERLAY_HEIGHT)
@@ -288,6 +290,8 @@ fn current_overlay_logical_size(window: &tauri::webview::WebviewWindow) -> Optio
 
 #[cfg(target_os = "windows")]
 static WINDOWS_OVERLAY_IS_STREAMING: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "windows")]
+static WINDOWS_OVERLAY_IS_SYNAPSE: AtomicBool = AtomicBool::new(false);
 
 /// Windows accessibility text size (Settings > Accessibility > Text size), a
 /// separate axis from display scaling that WebView2 applies as a document zoom.
@@ -490,7 +494,7 @@ fn show_overlay_state(app_handle: &AppHandle, state: &str) {
     // only chooses Top vs Bottom placement. Checked here (off the main thread)
     // so the common overlay-disabled case never pays for a main-thread hop.
     let settings = settings::get_settings(app_handle);
-    if settings.overlay_style == OverlayStyle::None {
+    if settings.overlay_style == OverlayStyle::None && state != "synapse" {
         return;
     }
 
@@ -538,7 +542,10 @@ fn show_overlay_state_on_main(app_handle: &AppHandle, state: &str) {
             let _ =
                 overlay_window.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }));
             #[cfg(target_os = "windows")]
-            WINDOWS_OVERLAY_IS_STREAMING.store(state == "streaming", Ordering::Relaxed);
+            {
+                WINDOWS_OVERLAY_IS_STREAMING.store(state == "streaming", Ordering::Relaxed);
+                WINDOWS_OVERLAY_IS_SYNAPSE.store(state == "synapse", Ordering::Relaxed);
+            }
             let size_elapsed = size_started.elapsed();
 
             let pos_started = std::time::Instant::now();
@@ -616,6 +623,114 @@ pub fn show_recording_overlay(app_handle: &AppHandle) {
 }
 
 /// Shows the larger streaming overlay that displays live transcription text
+/// Use the same nonactivating, all-Spaces NSPanel behavior as Handy's transcript.
+#[cfg(target_os = "macos")]
+pub fn create_synapse_overlay(app: &AppHandle) {
+    if app.get_webview_window("synapse_live").is_some() {
+        return;
+    }
+    match PanelBuilder::<_, RecordingOverlayPanel>::new(app, "synapse_live")
+        .url(WebviewUrl::App("src/overlay/index.html".into()))
+        .title("Live guidance")
+        .level(PanelLevel::Status)
+        .size(tauri::Size::Logical(tauri::LogicalSize {
+            width: 560.0,
+            height: 360.0,
+        }))
+        .has_shadow(false)
+        .transparent(true)
+        .no_activate(true)
+        .corner_radius(0.0)
+        .style_mask(StyleMask::empty().borderless().nonactivating_panel())
+        .with_window(|window| {
+            window
+                .decorations(false)
+                .transparent(true)
+                .focusable(false)
+                .focused(false)
+                .visible(false)
+                .resizable(false)
+                .skip_taskbar(true)
+        })
+        .collection_behavior(
+            CollectionBehavior::new()
+                .can_join_all_spaces()
+                .full_screen_auxiliary(),
+        )
+        .build()
+    {
+        Ok(panel) => panel.hide(),
+        Err(error) => log::error!("Unable to create live guidance panel: {error}"),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn create_synapse_overlay(app: &AppHandle) {
+    if app.get_webview_window("synapse_live").is_some() {
+        return;
+    }
+    let builder = tauri::WebviewWindowBuilder::new(
+        app,
+        "synapse_live",
+        tauri::WebviewUrl::App("src/overlay/index.html".into()),
+    )
+    .title("Live guidance")
+    .inner_size(560.0, 360.0)
+    .decorations(false)
+    .transparent(true)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .resizable(false)
+    .visible(false)
+    .focused(false)
+    .focusable(false);
+    if let Err(error) = builder.build() {
+        log::error!("Unable to create Synapse live panel: {error}");
+    }
+}
+
+pub fn show_synapse_overlay(app: &AppHandle) {
+    let enabled = app.state::<crate::synapse::SynapseState>().helper_enabled();
+    show_synapse_overlay_with_guidance(app, enabled);
+}
+
+pub fn show_synapse_overlay_with_guidance(app: &AppHandle, enabled: bool) {
+    // Keep Handy's original live pill, animation, waveform and text scrolling.
+    show_streaming_overlay(app);
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if enabled {
+            if let Some(window) = handle.get_webview_window("synapse_live") {
+                if let Some((x, mut y)) = calculate_overlay_position(&handle, 560.0, 360.0) {
+                    if settings::get_settings(&handle).overlay_position == OverlayPosition::Bottom {
+                        y -= OVERLAY_STREAM_HEIGHT + 8.0;
+                    } else {
+                        y += OVERLAY_STREAM_HEIGHT + 8.0;
+                    }
+                    let _ = window
+                        .set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+                }
+                let _ = window.show();
+            }
+        }
+        if !enabled {
+            if let Some(window) = handle.get_webview_window("synapse_live") {
+                let _ = window.hide();
+            }
+        }
+        // The native start has already confirmed real microphone frames.
+        let _ = handle.emit_to("recording_overlay", "recording-ready", ());
+    });
+}
+
+pub fn hide_synapse_overlay(app: &AppHandle) {
+    hide_recording_overlay(app);
+    if let Some(window) = app.get_webview_window("synapse_live") {
+        let _ = window.emit("hide-overlay", ());
+        let _ = window.hide();
+    }
+}
+
 pub fn show_streaming_overlay(app_handle: &AppHandle) {
     show_overlay_state(app_handle, "streaming");
 }
@@ -652,7 +767,9 @@ fn update_overlay_position_on_main(app_handle: &AppHandle) {
 
         #[cfg(target_os = "windows")]
         {
-            let state = if WINDOWS_OVERLAY_IS_STREAMING.load(Ordering::Relaxed) {
+            let state = if WINDOWS_OVERLAY_IS_SYNAPSE.load(Ordering::Relaxed) {
+                "synapse"
+            } else if WINDOWS_OVERLAY_IS_STREAMING.load(Ordering::Relaxed) {
                 "streaming"
             } else {
                 "recording"

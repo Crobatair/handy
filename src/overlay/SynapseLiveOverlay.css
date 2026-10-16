@@ -1,0 +1,163 @@
+.synapse-float {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 4px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--s-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-background) 82%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--color-text);
+  font: 15px var(--s-font);
+  overflow: hidden;
+  box-shadow: 0 4px 16px #0002;
+}
+.synapse-float header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--s-hair);
+}
+.synapse-float strong {
+  font-size: 16px;
+}
+.sf-status {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--s-muted);
+}
+.sf-status.listening::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--s-accent);
+  margin-right: 6px;
+  animation: sf-pulse 1.4s infinite;
+}
+.sf-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.sf-actions button {
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  padding: 6px 8px;
+  border: 1px solid var(--s-border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.sf-actions button:hover {
+  background: var(--s-accent-soft);
+}
+.sf-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  flex: 1;
+  min-height: 0;
+}
+.sf-columns > div,
+.sf-columns > aside {
+  padding: 14px 16px;
+  min-width: 0;
+  overflow: auto;
+}
+.sf-columns > aside {
+  border-left: 0;
+}
+.synapse-float h2 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.synapse-float h2 span {
+  float: right;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--s-muted);
+}
+.sf-transcript {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  max-height: 225px;
+  overflow: auto;
+  user-select: text;
+}
+.sf-guidance-group {
+  margin-top: 12px;
+}
+.synapse-float h3 {
+  font-size: 11px;
+  margin: 0 0 5px;
+}
+.synapse-float ul {
+  padding-left: 16px;
+  margin: 0;
+}
+.synapse-float li {
+  margin-bottom: 5px;
+  line-height: 1.45;
+}
+.synapse-float p {
+  line-height: 1.5;
+  color: var(--s-muted);
+}
+.synapse-float .sf-error {
+  color: #ef8585;
+}
+.sf-bottom {
+  margin: 0;
+  padding: 8px 16px;
+  border-top: 1px solid var(--s-hair);
+}
+@keyframes sf-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.synapse-float {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.sf-mode-label {
+  display: block;
+  font-size: 11px;
+  color: var(--s-muted);
+  margin-bottom: 4px;
+}
+.synapse-float header select {
+  color: inherit;
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  border-radius: 6px;
+  padding: 5px;
+  max-width: 220px;
+  font: inherit;
+}
+
+.synapse-float header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+.synapse-float header > .feedback-timing {
+  margin-top: 16px;
+}
+.synapse-float header > .sf-actions {
+  grid-column: 1 / -1;
+}
+.synapse-float .feedback-timing-heading strong {
+  font-size: 13px;
+}

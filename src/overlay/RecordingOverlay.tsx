@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +11,7 @@ import type {
   StreamWorkKind,
 } from "@/bindings";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
+import type { Transcript } from "@/lib/synapse/api";
 import type { ModelStateEvent } from "@/lib/types/events";
 import { getLanguageDirection } from "@/lib/utils/rtl";
 
@@ -134,6 +136,47 @@ const RecordingOverlay: React.FC = () => {
         setStreamText(event.payload);
       });
 
+      const unlistenWorkspaceText = await listen<Transcript>(
+        "synapse-transcript",
+        (event) => {
+          if (event.payload.session_id?.startsWith("shortcut-"))
+            setStreamText({
+              committed: event.payload.committed,
+              tentative: event.payload.tentative,
+            });
+        },
+      );
+      const unlistenWorkspacePhase = await listen<Transcript>(
+        "synapse-session",
+        (event) => {
+          const payload = event.payload;
+          if (payload.phase === "preview") {
+            setState("streaming");
+            setIsVisible(true);
+            setPhase("listening");
+            setStreamText({
+              committed: t("synapse.overlayWaiting"),
+              tentative: "",
+            });
+          } else if (payload.phase === "recording") {
+            setPhase("listening");
+            setCaptureReady(true);
+          } else if (
+            payload.phase === "stopping" ||
+            payload.phase === "processing"
+          ) {
+            setPhase("working");
+            setWorkKind(
+              payload.phase === "processing" ? "polishing" : "transcribing",
+            );
+          } else if (payload.phase === "finished")
+            setStreamText({
+              committed: payload.output || payload.committed,
+              tentative: "",
+            });
+        },
+      );
+
       const unlistenPhase = await events.streamPhaseEvent.listen((event) => {
         const payload: StreamPhaseEvent = event.payload;
         setPhase(payload.phase);
@@ -174,12 +217,23 @@ const RecordingOverlay: React.FC = () => {
         unlistenLevel();
         unlistenStream();
         unlistenPhase();
+        unlistenWorkspaceText();
+        unlistenWorkspacePhase();
         unlistenModel();
         clearTimeout(modelLoadTimerRef.current);
       };
     };
 
-    setupEventListeners();
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
+    void setupEventListeners().then((unsubscribe) => {
+      if (disposed) unsubscribe();
+      else cleanup = unsubscribe;
+    });
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
   }, []);
 
   // Elapsed capture timer starts only once microphone samples are flowing.
@@ -309,6 +363,22 @@ const RecordingOverlay: React.FC = () => {
           }`}
         >
           <div className="stext">
+            <button
+              className="preview-copy"
+              onMouseDown={(event) => event.preventDefault()}
+              aria-label={t("synapse.copyTranscript")}
+              onClick={() => {
+                const selected = window.getSelection()?.toString();
+                const text =
+                  selected ||
+                  [streamText.committed, streamText.tentative]
+                    .filter(Boolean)
+                    .join(" ");
+                if (text) void invoke("synapse_copy", { text });
+              }}
+            >
+              {t("synapse.copy")}
+            </button>
             <div className="stext-clip">
               <div
                 className={`stext-cap ${overflowing ? "overflowing" : ""}`}

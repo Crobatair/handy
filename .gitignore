@@ -45,3 +45,36 @@ result
 
 # Python bytecode (scripts/)
 __pycache__/
+
+# Local-only Synapse development data
+.env
+.env.*
+!.env.example
+artifacts/
+SYNAPSE-POC.md
+.codex/
+.agents/
+Data/
+*.dmp
+*.ips
+*.diag
+*.sqlite
+*.sqlite3
+settings_store.json
+/src-tauri/resources/models/*.gguf
+!/src-tauri/resources/models/silero-vad-v6.2-F32.gguf
+
+# Credentials, recordings, and runtime databases
+*.pem
+*.key
+*.p12
+*.pfx
+*.db
+*.db-*
+*.sqlite-*
+*.sqlite3-*
+*.mp3
+*.m4a
+*.flac
+*.mp4
+*.mov

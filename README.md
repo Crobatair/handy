@@ -1,10 +1,39 @@
-# Handy
+# Handy — Synapse fork
 
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/invite/WVBeWsNXK4)
 
 **A free, open source, and extensible speech-to-text application that works completely offline.**
 
-Handy is a cross-platform desktop application that provides simple, privacy-focused speech transcription. Press a shortcut, speak, and have your words appear in any text field. This happens on your own computer without sending any information to the cloud.
+Handy is a cross-platform desktop application that provides simple, privacy-focused speech transcription. Press a shortcut, speak, and have your words appear in any text field. Local dictation happens on your own computer. This fork additionally supports optional cloud services, described below.
+
+## About this fork
+
+This repository builds **Synapse**, a desktop dictation app based on [Handy](https://github.com/cjpais/Handy). It keeps Handy's Rust/Tauri backend, React interface, local speech models, and original live transcript preview. No separate Synapse server is required.
+
+- **Plain dictation** transcribes and inserts speech without AI rewriting or live guidance. Configure its separate shortcut under General.
+- **Guided dictation** offers selectable task instructions, transcript rewriting, and a floating prompt-writing guide. Choose a mode and AI provider under Advanced → Live dictation settings.
+- **Local or cloud speech:** use a downloaded local model or opt into Deepgram. Cloud speech sends audio to the selected service; cloud guidance/rewriting sends text and supplied context to the selected AI provider. Choose a localhost language-model endpoint for fully local operation.
+- **Feedback timing:** select 5, 10, 15, 30, or 60 seconds in the guide's title bar or settings. Unchanged spoken words do not trigger another request. Pausing affects the current session.
+- **Your credentials:** use your own provider keys. Deepgram keys stay in memory; AI provider keys use Handy's existing local settings storage. Do not commit settings, recordings, keys, or transcripts.
+
+### Build this fork
+
+Install Bun, Rust, and the platform requirements in [BUILD.md](BUILD.md), then run:
+
+```sh
+bun install
+bun run tauri dev
+# On macOS with a CMake compatibility error:
+CMAKE_POLICY_VERSION_MINIMUM=3.5 bun run tauri dev
+```
+
+Build an app with `bun run tauri build`. Run `bun run build`, `bun run lint`, and the relevant Rust tests before contributing. The additional UI checks are `bunx playwright test tests/synapse.spec.ts tests/synapse-overlay.spec.ts` (install the Chromium browser with `bunx playwright install chromium` first).
+
+This fork uses a separate application identifier and disables the upstream self-updater. macOS keyboard insertion requires Accessibility access. Development builds are unsigned/not notarized unless signing is configured. Provider authentication must be valid; an HTTP 401 is not fixed by changing the feedback interval. The reviewed fixes address shortcut timing, overlay Spaces behavior, blocking paste work, and modifier cleanup; they do not establish the cause of any system-wide freeze.
+
+Handy remains MIT licensed; see [LICENSE](LICENSE). Upstream authorship, notices, and documentation are retained below. Upstream downloads and links refer to the original Handy project.
+
+---
 
 ## Why Handy?
 

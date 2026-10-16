@@ -142,6 +142,8 @@ const ANTHROPIC_MAX_TOKENS: u32 = 4096;
 
 #[derive(Debug, Serialize)]
 struct AnthropicMessagesRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system: Option<String>,
     model: String,
     max_tokens: u32,
     messages: Vec<ChatMessage>,
@@ -180,6 +182,7 @@ impl AnthropicMessagesResponse {
 
 /// Build headers for API requests based on provider type
 fn build_headers(provider: &PostProcessProvider, api_key: &str) -> Result<HeaderMap, String> {
+    let api_key = api_key.trim();
     let mut headers = HeaderMap::new();
 
     // Common headers
@@ -219,6 +222,8 @@ fn build_headers(provider: &PostProcessProvider, api_key: &str) -> Result<Header
 fn create_client(provider: &PostProcessProvider, api_key: &str) -> Result<reqwest::Client, String> {
     let headers = build_headers(provider, api_key)?;
     reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
         .default_headers(headers)
         .build()
         .map_err(|e| report_reqwest_error("Failed to build HTTP client", &e))
@@ -348,7 +353,7 @@ pub async fn send_chat_completion(
     disable_reasoning: bool,
 ) -> Result<Option<String>, String> {
     if provider.api_format == PostProcessApiFormat::Anthropic {
-        return send_anthropic_message(provider, api_key, model, prompt).await;
+        return send_anthropic_message(provider, api_key, model, prompt, None).await;
     }
 
     send_chat_completion_with_schema(
@@ -382,6 +387,9 @@ pub async fn send_chat_completion_with_schema(
     json_schema: Option<Value>,
     disable_reasoning: bool,
 ) -> Result<Option<String>, String> {
+    if provider.api_format == PostProcessApiFormat::Anthropic {
+        return send_anthropic_message(provider, api_key, model, user_content, system_prompt).await;
+    }
     let base_url = provider.base_url.trim_end_matches('/');
     let url = format!("{}/chat/completions", base_url);
 
@@ -486,6 +494,9 @@ pub async fn send_chat_completion_with_schema(
         }
     }
 
+    if status.as_u16() == 401 || status.as_u16() == 403 {
+        return Err(format!("Authentication failed for {} (HTTP {}). Check the API key for this provider in Advanced → Live dictation settings → AI model. A key for another provider will not work here.", provider.label, status.as_u16()));
+    }
     if !status.is_success() {
         let error_text = response
             .text()
@@ -526,6 +537,7 @@ async fn send_anthropic_message(
     api_key: String,
     model: &str,
     prompt: String,
+    system: Option<String>,
 ) -> Result<Option<String>, String> {
     let url = format!("{}/messages", provider.base_url.trim_end_matches('/'));
 
@@ -535,6 +547,7 @@ async fn send_anthropic_message(
     );
 
     let request_body = AnthropicMessagesRequest {
+        system,
         model: model.to_string(),
         max_tokens: ANTHROPIC_MAX_TOKENS,
         messages: vec![ChatMessage {
@@ -557,6 +570,9 @@ async fn send_anthropic_message(
         sanitized_url(response.url())
     );
 
+    if status.as_u16() == 401 || status.as_u16() == 403 {
+        return Err(format!("Authentication failed for {} (HTTP {}). Check the API key for this provider in Advanced → Live dictation settings → AI model. A key for another provider will not work here.", provider.label, status.as_u16()));
+    }
     if !status.is_success() {
         let error_text = response
             .text()
@@ -611,6 +627,9 @@ pub async fn fetch_models(
         response.version(),
         sanitized_url(response.url())
     );
+    if status.as_u16() == 401 || status.as_u16() == 403 {
+        return Err(format!("Authentication failed for {} (HTTP {}). Check the API key for this provider in Advanced → Live dictation settings → AI model. A key for another provider will not work here.", provider.label, status.as_u16()));
+    }
     if !status.is_success() {
         let error_text = response
             .text()
@@ -726,6 +745,27 @@ mod tests {
         });
 
         format!("http://{address}")
+    }
+
+    #[tokio::test]
+    async fn authentication_failure_explains_the_provider_setup() {
+        let base_url = serve_one_response(
+            "401 Unauthorized",
+            r#"{"error":{"message":"Missing Authentication header"}}"#,
+        )
+        .await;
+        let result = send_chat_completion(
+            &anthropic_format_provider(&base_url),
+            "test-key".into(),
+            "test-model",
+            "test".into(),
+            true,
+        )
+        .await
+        .unwrap_err();
+        assert!(result.contains("Authentication failed"));
+        assert!(result.contains("API key"));
+        assert!(!result.contains("test-key"));
     }
 
     #[test]
@@ -884,6 +924,7 @@ mod tests {
     #[test]
     fn anthropic_request_carries_required_max_tokens() {
         let request = AnthropicMessagesRequest {
+            system: Some("Return only the finished request".to_string()),
             model: "claude-haiku".to_string(),
             max_tokens: ANTHROPIC_MAX_TOKENS,
             messages: vec![ChatMessage {
@@ -892,6 +933,7 @@ mod tests {
             }],
         };
         let json = serde_json::to_value(&request).unwrap();
+        assert_eq!(json["system"], "Return only the finished request");
         assert_eq!(json["max_tokens"], ANTHROPIC_MAX_TOKENS);
         assert_eq!(json["messages"][0]["role"], "user");
         assert!(json.get("stream").is_none());

@@ -169,7 +169,7 @@ enum Effect {
 
 /// Commands processed sequentially by the coordinator thread.
 enum Command {
-    Input(InputEvent),
+    Input(InputEvent, Instant),
     Cancel { recording_was_active: bool },
     ProcessingFinished,
 }
@@ -535,7 +535,7 @@ pub struct TranscriptionCoordinator {
 }
 
 pub fn is_transcribe_binding(id: &str) -> bool {
-    id == "transcribe" || id == "transcribe_with_post_process"
+    id == "transcribe" || id == "transcribe_with_post_process" || id == "plain_dictation"
 }
 
 impl TranscriptionCoordinator {
@@ -566,8 +566,8 @@ impl TranscriptionCoordinator {
                     };
 
                     match cmd {
-                        Command::Input(input) => {
-                            if let Some(effect) = state.on_input(input, Instant::now()) {
+                        Command::Input(input, received_at) => {
+                            if let Some(effect) = state.on_input(input, received_at) {
                                 run_effect(&app, &mut state, effect);
                             }
                         }
@@ -635,14 +635,17 @@ impl TranscriptionCoordinator {
     ) {
         if self
             .tx
-            .send(Command::Input(InputEvent {
-                binding_id: binding_id.to_string(),
-                hotkey_string: hotkey_string.to_string(),
-                is_pressed,
-                mode,
-                hold_threshold,
-                external,
-            }))
+            .send(Command::Input(
+                InputEvent {
+                    binding_id: binding_id.to_string(),
+                    hotkey_string: hotkey_string.to_string(),
+                    is_pressed,
+                    mode,
+                    hold_threshold,
+                    external,
+                },
+                Instant::now(),
+            ))
             .is_err()
         {
             warn!("Transcription coordinator channel closed");
@@ -1246,6 +1249,34 @@ mod tests {
             "an 800ms hold must stop when its release grace elapses"
         );
         assert_eq!(state.stage, Stage::Processing);
+    }
+
+    #[test]
+    fn queued_release_keeps_its_tap_duration_after_a_slow_start() {
+        let mut state = CoordinatorState::new();
+        let pressed_at = Instant::now();
+        assert!(matches!(
+            state.on_input(input(ShortcutActivation::HoldOrToggle, true), pressed_at),
+            Some(Effect::Start { .. })
+        ));
+        // Model loading blocks this worker for seconds. The release arrived
+        // after 120ms, and must not be dated at the later processing time.
+        let queued = Command::Input(
+            input(ShortcutActivation::HoldOrToggle, false),
+            pressed_at + ms(120),
+        );
+        let processed_at = pressed_at + ms(3000);
+        if let Command::Input(release, received_at) = queued {
+            assert!(received_at < processed_at);
+            assert!(state.on_input(release, received_at).is_none());
+        }
+        assert!(state.on_grace_expired().is_none());
+        assert_eq!(state.stage, Stage::Recording(BINDING.to_string()));
+        assert!(state.is_locked());
+        assert!(matches!(
+            state.on_input(input(ShortcutActivation::HoldOrToggle, true), processed_at),
+            Some(Effect::Stop { .. })
+        ));
     }
 
     /// Hold-or-toggle: a tap keeps recording (locked on); the next press stops.

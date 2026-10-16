@@ -1,4 +1,3 @@
-use crate::utils;
 use log::{debug, warn};
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -952,6 +951,21 @@ pub fn get_default_settings() -> AppSettings {
             current_binding: default_post_process_shortcut.to_string(),
         },
     );
+    #[cfg(target_os = "macos")]
+    let default_plain_shortcut = "ctrl+shift+space";
+    #[cfg(not(target_os = "macos"))]
+    let default_plain_shortcut = "ctrl+alt+shift+space";
+    bindings.insert(
+        "plain_dictation".to_string(),
+        ShortcutBinding {
+            id: "plain_dictation".to_string(),
+            name: "Plain dictation".to_string(),
+            description: "Transcribe and copy speech without live guidance or AI rewriting."
+                .to_string(),
+            default_binding: default_plain_shortcut.to_string(),
+            current_binding: default_plain_shortcut.to_string(),
+        },
+    );
     bindings.insert(
         "cancel".to_string(),
         ShortcutBinding {
@@ -1266,9 +1280,8 @@ fn apply_settings_migrations(
 /// `HANDY_DISABLE_UPDATER` is set — e.g. by the Nix package, since self-update
 /// can't work against an immutable /nix/store install.
 pub fn update_checks_forced_disabled() -> bool {
-    use std::sync::OnceLock;
-    static IS_UPDATER_DISABLED: OnceLock<bool> = OnceLock::new();
-    *IS_UPDATER_DISABLED.get_or_init(|| utils::env_flag_enabled("HANDY_DISABLE_UPDATER"))
+    // This independent fork must never install upstream Handy releases.
+    true
 }
 
 /// Effective updater state: the user's stored preference, overridden to `false`

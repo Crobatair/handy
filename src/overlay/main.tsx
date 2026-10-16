@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
+import SynapseLiveOverlay from "./SynapseLiveOverlay";
 import RecordingOverlay from "./RecordingOverlay";
 import {
   applyTheme,
@@ -20,6 +22,10 @@ listen<Theme>("theme-changed", (event) => applyTheme(event.payload));
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <RecordingOverlay />
+    {getCurrentWindow().label === "synapse_live" ? (
+      <SynapseLiveOverlay />
+    ) : (
+      <RecordingOverlay />
+    )}
   </React.StrictMode>,
 );

@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import LiveDictationSettings from "../../synapse/LiveDictationSettings";
 import { useTranslation } from "react-i18next";
 import { ShowOverlay } from "../ShowOverlay";
 import { ModelUnloadTimeoutSetting } from "../ModelUnloadTimeout";
@@ -27,11 +28,31 @@ import { VadBackendSelector } from "../VadBackendSelector";
 
 export const AdvancedSettings: React.FC = () => {
   const { t } = useTranslation();
+  const [liveExpanded, setLiveExpanded] = useState(() => {
+    const requested =
+      sessionStorage.getItem("synapse.open-live-settings") === "true";
+    return requested;
+  });
+  useEffect(() => {
+    sessionStorage.removeItem("synapse.open-live-settings");
+  }, []);
   const { getSetting } = useSettings();
   const experimentalEnabled = getSetting("experimental_enabled") || false;
 
   return (
     <div className="max-w-3xl w-full mx-auto space-y-6">
+      <details
+        open={liveExpanded}
+        onToggle={(event) => setLiveExpanded(event.currentTarget.open)}
+        className="rounded-xl border border-mid-gray/20 p-4"
+      >
+        <summary className="cursor-pointer text-sm font-semibold">
+          {t("synapse.settingsTitle")}
+        </summary>
+        <div className="mt-5">
+          <LiveDictationSettings />
+        </div>
+      </details>
       <SettingsGroup title={t("settings.advanced.groups.app")}>
         <StartHidden descriptionMode="tooltip" grouped={true} />
         <AutostartToggle descriptionMode="tooltip" grouped={true} />

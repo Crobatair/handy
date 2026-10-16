@@ -28,7 +28,7 @@ fn with_enigo<T>(
     f(&mut enigo)
 }
 
-fn write_text_to_clipboard(app_handle: &AppHandle, text: &str) -> Result<(), String> {
+pub(crate) fn write_text_to_clipboard(app_handle: &AppHandle, text: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     if is_wayland() && is_wl_copy_available() {
         info!("Using wl-copy for clipboard write on Wayland");
@@ -772,10 +772,16 @@ fn should_send_auto_submit(auto_submit: bool, paste_method: PasteMethod) -> bool
 }
 
 pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
+    // A transaction includes clipboard changes, key events and restoration.
+    // Never interleave two transactions or wait indefinitely for another paste.
+    static PASTE_TRANSACTION: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _transaction = PASTE_TRANSACTION.try_lock().map_err(|_| {
+        "Another paste is still in progress; text remains available on the clipboard"
+    })?;
     let settings = get_settings(&app_handle);
     let paste_method = settings.paste_method;
-    let paste_delay_ms = settings.paste_delay_ms;
-    let paste_delay_after_ms = settings.paste_delay_after_ms;
+    let paste_delay_ms = settings.paste_delay_ms.min(1000);
+    let paste_delay_after_ms = settings.paste_delay_after_ms.min(1000);
 
     // Append trailing space if setting is enabled
     let text = if settings.append_trailing_space {

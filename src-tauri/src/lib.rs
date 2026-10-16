@@ -22,6 +22,7 @@ mod secure_input;
 mod settings;
 mod shortcut;
 mod signal_handle;
+mod synapse;
 mod transcription_coordinator;
 mod tray;
 mod tray_i18n;
@@ -212,6 +213,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 
     // Add managers to Tauri's managed state
     app_handle.manage(recording_manager.clone());
+    app_handle.manage(synapse::SynapseState::default());
     app_handle.manage(model_manager.clone());
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
@@ -364,6 +366,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 
     // Create the recording overlay window (hidden by default)
     utils::create_recording_overlay(app_handle);
+    overlay::create_synapse_overlay(app_handle);
 }
 
 #[tauri::command]
@@ -651,6 +654,19 @@ pub fn run(cli_args: CliArgs) {
 
     let specta_builder = Builder::<tauri::Wry>::new()
         .commands(collect_commands![
+            synapse::synapse_preview_overlay,
+            synapse::synapse_dismiss_overlay,
+            synapse::synapse_shortcut_stop,
+            synapse::synapse_configure,
+            synapse::synapse_set_guidance,
+            synapse::synapse_set_interval,
+            synapse::synapse_select_mode,
+            synapse::synapse_copy,
+            synapse::synapse_start,
+            synapse::synapse_stop,
+            synapse::synapse_cancel,
+            synapse::synapse_guidance,
+            synapse::synapse_rewrite,
             shortcut::change_binding,
             shortcut::reset_binding,
             shortcut::change_shortcut_activation_setting,
@@ -879,7 +895,6 @@ pub fn run(cli_args: CliArgs) {
     let mut app = builder
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_macos_permissions::init())
@@ -946,9 +961,9 @@ pub fn run(cli_args: CliArgs) {
             // for portable mode (redirects WebView2 cache to portable Data dir)
             let mut win_builder =
                 tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("/".into()))
-                    .title("Handy")
-                    .inner_size(680.0, 570.0)
-                    .min_inner_size(680.0, 570.0)
+                    .title("Synapse")
+                    .inner_size(1060.0, 780.0)
+                    .min_inner_size(760.0, 600.0)
                     .resizable(true)
                     .maximizable(true)
                     .visible(false);

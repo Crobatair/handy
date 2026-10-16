@@ -469,3 +469,32 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.stext {
+  position: relative;
+}
+.stext-cap {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+.stext-cap p {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.preview-copy {
+  position: absolute;
+  right: 10px;
+  top: 4px;
+  z-index: 2;
+  color: var(--s-muted);
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  border-radius: 5px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font: 11px var(--s-font);
+}
+.stext-cap {
+  padding-top: 22px;
+}

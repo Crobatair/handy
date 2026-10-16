@@ -13,7 +13,7 @@
     "general": "General",
     "models": "Models",
     "advanced": "Advanced",
-    "postProcessing": "Post Process",
+    "postProcessing": "AI settings",
     "history": "History",
     "debug": "Debug",
     "about": "About"
@@ -101,7 +101,7 @@
     },
     "permissions": {
       "title": "Permissions Required",
-      "description": "Handy needs a couple of permissions to work properly.",
+      "description": "Synapse needs a couple of permissions to work properly.",
       "microphone": {
         "title": "Microphone Access",
         "description": "Required to hear your voice for transcription."
@@ -161,7 +161,7 @@
     "general": {
       "title": "General",
       "shortcut": {
-        "title": "Handy Shortcuts",
+        "title": "Synapse Shortcuts",
         "description": "Configure keyboard shortcuts to trigger speech-to-text recording",
         "loading": "Loading shortcuts...",
         "none": "No shortcuts configured",
@@ -179,6 +179,10 @@
           "transcribe_with_post_process": {
             "name": "Post-Processing Hotkey",
             "description": "Optional: A dedicated hotkey that always applies AI post-processing to your transcription."
+          },
+          "plain_dictation": {
+            "name": "Plain dictation shortcut",
+            "description": "Transcribe and copy speech without live guidance or AI rewriting. Uses your selected speech provider."
           }
         },
         "errors": {
@@ -225,7 +229,7 @@
       },
       "rescan": {
         "label": "Rescan",
-        "tooltip": "Rescan for models added to the models folder or Hugging Face cache outside Handy"
+        "tooltip": "Rescan for models added to the models folder or Hugging Face cache outside Synapse"
       },
       "noModelsMatch": "No models match this filter."
     },
@@ -293,11 +297,11 @@
       },
       "autostart": {
         "label": "Launch on Startup",
-        "description": "Automatically start Handy when you log in to your computer."
+        "description": "Automatically start Synapse when you log in to your computer."
       },
       "showTrayIcon": {
         "label": "Show Tray Icon",
-        "description": "Display the Handy icon in the system tray."
+        "description": "Display the Synapse icon in the system tray."
       },
       "overlay": {
         "style": {
@@ -511,7 +515,7 @@
       },
       "updateChecks": {
         "label": "Check for Updates",
-        "description": "Automatically check for new versions of Handy",
+        "description": "Automatically check for new versions of Synapse",
         "lockedDescription": "Disabled by system configuration (HANDY_DISABLE_UPDATER)"
       },
       "whatsNewPreview": {
@@ -603,7 +607,7 @@
       },
       "keyboardDiagnostic": {
         "title": "Keyboard Diagnostic",
-        "description": "Checks whether keyboard events reach Handy. Only event counts are recorded — never which keys you press.",
+        "description": "Checks whether keyboard events reach Synapse. Only event counts are recorded — never which keys you press.",
         "run": "Run 10s diagnostic",
         "running": "Listening… press your shortcut a few times (e.g. Option+Space)",
         "secureInputLabel": "Secure Input",
@@ -617,7 +621,7 @@
         "mouse": "Mouse",
         "verdictBlocked": "Secure Input is blocking key events — keyed shortcuts cannot work until it is resolved.",
         "verdictSuspicious": "Modifier events arrived but no key events — something is suppressing keys even though Secure Input reports disabled. Please report this on GitHub.",
-        "verdictOk": "Key events are reaching Handy normally.",
+        "verdictOk": "Key events are reaching Synapse normally.",
         "verdictNoEvents": "No events captured — did you press any keys during the test?",
         "failed": "Diagnostic failed: {{error}}"
       }
@@ -626,15 +630,15 @@
       "title": "About",
       "version": {
         "title": "Version",
-        "description": "Current version of Handy"
+        "description": "Current version of Synapse"
       },
       "whatsNewUpdates": {
         "label": "Show What's New",
-        "description": "Show release notes after Handy updates"
+        "description": "Show release notes after Synapse updates"
       },
       "appDataDirectory": {
         "title": "App Data Directory",
-        "description": "Location where Handy stores its data"
+        "description": "Location where Synapse stores its data"
       },
       "sourceCode": {
         "title": "Source Code",
@@ -643,7 +647,7 @@
       },
       "supportDevelopment": {
         "title": "Support Development",
-        "description": "Help us continue building Handy",
+        "description": "Help us continue building Synapse",
         "button": "Donate"
       },
       "acknowledgments": {
@@ -651,7 +655,7 @@
         "ggml": {
           "title": "ggml",
           "description": "High-performance tensor library for on-device machine learning inference",
-          "details": "Handy's local speech-to-text is built on transcribe.cpp and ggml. Thanks to the amazing work by Georgi Gerganov and contributors."
+          "details": "Synapse's local speech-to-text is built on transcribe.cpp and ggml. Thanks to the amazing work by Georgi Gerganov and contributors."
         }
       }
     }
@@ -672,7 +676,7 @@
     "portableUpdateBrowseButton": "Open GitHub Releases"
   },
   "whatsNew": {
-    "title": "New in Handy v{{version}}"
+    "title": "New in Synapse v{{version}}"
   },
   "common": {
     "loading": "Loading...",
@@ -684,7 +688,7 @@
     "noOptionsFound": "No options found"
   },
   "accessibility": {
-    "permissionsDescription": "Handy needs accessibility permissions to type transcribed text.",
+    "permissionsDescription": "Synapse needs accessibility permissions to type transcribed text.",
     "openSettings": "Open System Settings"
   },
   "errors": {
@@ -707,11 +711,11 @@
   },
   "appLanguage": {
     "title": "Application Language",
-    "description": "Change the language of the Handy interface"
+    "description": "Change the language of the Synapse interface"
   },
   "theme": {
     "title": "Application Theme",
-    "description": "Choose whether Handy follows your system theme or stays light or dark",
+    "description": "Choose whether Synapse follows your system theme or stays light or dark",
     "options": {
       "system": "System",
       "light": "Light",
@@ -733,5 +737,128 @@
     "learnMore": "How to fix",
     "recorderBlocked": "Can't record shortcuts right now — macOS Secure Input is blocking key events. Resolve the Secure Input warning first.",
     "dismiss": "Dismiss"
+  },
+  "synapse": {
+    "title": "Synapse workspace",
+    "subtitle": "Speak, shape your thoughts, and get guidance as you go.",
+    "prototype": "Proof of concept",
+    "transcriptionProvider": "Speech recognition",
+    "local": "Local model",
+    "deepgram": "Deepgram · cloud",
+    "mode": "Task mode",
+    "custom": "Custom mode",
+    "customDescription": "Follow your own task instructions.",
+    "deepgramKey": "Deepgram API key",
+    "keyHint": "Used for this session; never saved by the workspace.",
+    "language": "Speech language",
+    "english": "English",
+    "spanish": "Spanish",
+    "multilingual": "English + Spanish · multilingual",
+    "localHint": "Selected model: {{model}}. Download or change it in Models. Live text appears only for models that support streaming; others transcribe after you stop.",
+    "noModel": "No model selected",
+    "noProvider": "No provider selected",
+    "instructions": "Mode instructions",
+    "contextTitle": "Context, dictionary, and correction rules",
+    "context": "About you or the task",
+    "dictionary": "Terms to preserve",
+    "rules": "Correction rules",
+    "start": "Start recording",
+    "stop": "Stop recording",
+    "cancel": "Discard",
+    "liveGuidance": "Live guidance",
+    "localAudio": "Audio stays on this device",
+    "cloudAudio": "Audio sent to Deepgram",
+    "aiRoute": "Rewriting and guidance: {{provider}} · {{model}}.",
+    "aiHint": "Configure this separately in AI settings. For fully local operation, select Local speech and a Custom AI endpoint on localhost.",
+    "transcript": "Live transcript",
+    "transcriptHint": "Your words will appear here. Choose a speech provider and start recording.",
+    "copyTranscript": "Copy transcript",
+    "rewrite": "Apply task mode",
+    "updating": "Updating…",
+    "guidanceHint": "Guidance checks every {{seconds}} seconds and only sends a request when the spoken words change.",
+    "noGuidance": "No specific suggestions yet. Keep speaking.",
+    "finalOutput": "Final output",
+    "copy": "Copy",
+    "copied": "Copied to clipboard.",
+    "copyError": "Unable to copy. Select the text and copy it manually.",
+    "phases": {
+      "idle": "Ready",
+      "starting": "Starting…",
+      "recording": "Listening",
+      "stopping": "Finalizing…",
+      "rewriting": "Applying mode…"
+    },
+    "guidance": {
+      "good_practices": "Working well",
+      "missing": "What’s missing",
+      "deep_dive": "Explore further",
+      "next_steps": "Improve your request · highest priority first",
+      "outline": "Important parts of your request"
+    },
+    "modes": {
+      "clean": {
+        "label": "Clean text",
+        "description": "Repair transcription and grammar while preserving your voice."
+      },
+      "message": {
+        "label": "Message",
+        "description": "Create a concise, polite message."
+      },
+      "prompt": {
+        "label": "AI prompt",
+        "description": "Prepare a clear prompt with context, task, and constraints."
+      },
+      "ideas": {
+        "label": "Ideas",
+        "description": "Organize spoken ideas into useful notes."
+      },
+      "opus_prompt": {
+        "label": "Claude Opus 5.5 request",
+        "description": "Turn dictation into a complete request using your saved Opus instructions."
+      }
+    },
+    "brand": "Synapse",
+    "forkAttribution": "Independent Synapse prototype, based on Handy. No affiliation with Handy.",
+    "autoCorrect": "Apply task mode when I stop",
+    "rawCopied": "Transcript copied. Paste it with Ctrl+V (⌘V on Mac).",
+    "correctedCopied": "Final text copied. Paste it with Ctrl+V (⌘V on Mac).",
+    "aiSetup": "AI model for text cleanup and live guidance",
+    "aiExplanation": "Speech models recognize audio. Claude, OpenAI, or a local language model edits the transcript and provides guidance. Choose that provider and model here.",
+    "previewOverlay": "Preview floating panel",
+    "overlayPreview": "Preview · microphone is off",
+    "overlayWaiting": "Live words appear here as you speak.",
+    "overlayDisabled": "Live guidance is off. Enable it in the workspace.",
+    "overlayCopied": "Copied · ready to paste",
+    "overlayClose": "Close panel",
+    "floatingTitle": "Live guidance helper",
+    "overlayFailed": "Recording failed",
+    "settingsTitle": "Live dictation settings",
+    "settingsSubtitle": "Choose speech recognition, task instructions, and the AI model for cleanup and guidance.",
+    "instructionsHint": "Instructions are saved on this device. The AI provider and model below choose which model runs them.",
+    "resetInstructions": "Restore default instructions",
+    "pauseGuidance": "Skip live guidance",
+    "resumeGuidance": "Resume live guidance",
+    "setupMissing": "Complete your setup",
+    "needSpeechKey": "Add a Deepgram API key for cloud transcription.",
+    "needSpeechModel": "Select and download a speech model in Models.",
+    "needAiModel": "Select an AI model for cleanup and guidance.",
+    "needAiKey": "Add an API key for the selected AI provider.",
+    "needInstructions": "Enter mode instructions for text cleanup.",
+    "interval": "Feedback interval",
+    "seconds_one": "{{count}} second",
+    "seconds_other": "{{count}} seconds",
+    "shortSeconds": "{{count}}s",
+    "timingDescription": "Choose how often the guide reviews your draft.",
+    "fasterFeedback": "Faster feedback",
+    "fewerRequests": "Fewer AI requests",
+    "onlyNewWords": "Only new or changed words trigger a request.",
+    "timingDone": "Done",
+    "timing": {
+      "5": "Frequent",
+      "10": "Responsive",
+      "15": "Balanced",
+      "30": "Calm",
+      "60": "Quiet"
+    }
   }
 }

@@ -60,7 +60,7 @@ function App() {
   // (vs a new user who needs full onboarding including model selection)
   const [isReturningUser, setIsReturningUser] = useState(false);
   const [currentSection, setCurrentSection] =
-    useState<SidebarSection>("general");
+    useState<SidebarSection>("synapse");
   const { settings, updateSetting } = useSettings();
   const direction = getLanguageDirection(i18n.language);
   const refreshAudioDevices = useSettingsStore(
@@ -84,6 +84,16 @@ function App() {
     document.documentElement.toggleAttribute(attribute, isShowingOnboarding);
     return () => document.documentElement.removeAttribute(attribute);
   }, [isShowingOnboarding]);
+
+  useEffect(() => {
+    const openSettings = () => {
+      sessionStorage.setItem("synapse.open-live-settings", "true");
+      setCurrentSection("advanced");
+    };
+    window.addEventListener("synapse-open-settings", openSettings);
+    return () =>
+      window.removeEventListener("synapse-open-settings", openSettings);
+  }, []);
 
   // Reset the scroll position whenever the active section changes.
   useLayoutEffect(() => {
@@ -284,7 +294,7 @@ function App() {
   const handleAccessibilityComplete = () => {
     // Returning users already have models, skip to main app
     // New users need to select a model
-    setOnboardingStep(isReturningUser ? "done" : "model");
+    setOnboardingStep("done");
   };
 
   const handleModelSelected = () => {

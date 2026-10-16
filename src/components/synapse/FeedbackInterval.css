@@ -1,0 +1,124 @@
+.feedback-timing {
+  position: relative;
+  display: inline-flex;
+  font:
+    12px -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: var(--color-text);
+}
+.feedback-timing-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-logo-primary) 8%, transparent);
+  color: inherit;
+  padding: 7px 10px;
+  cursor: pointer;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.feedback-timing-trigger:hover,
+.feedback-timing-trigger[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--color-logo-primary) 18%, transparent);
+}
+.feedback-timing-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 290px;
+  padding: 16px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 14px;
+  background: var(--color-background);
+  box-shadow: 0 12px 36px #0003;
+  text-align: start;
+  user-select: none;
+}
+.feedback-timing-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.feedback-timing-heading strong {
+  font-size: 13px;
+}
+.feedback-timing-heading > span {
+  color: var(--color-logo-primary);
+  font-size: 11px;
+}
+.feedback-timing-popover p {
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.7;
+  margin: 8px 0 14px;
+}
+.feedback-timing-options {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  padding: 3px;
+  gap: 3px;
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+.feedback-timing-options label {
+  position: relative;
+  cursor: pointer;
+}
+.feedback-timing-options input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.feedback-timing-options label > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 32px;
+  border-radius: 7px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.feedback-timing-options input:checked + span {
+  background: var(--color-logo-primary);
+  color: var(--color-background);
+  box-shadow: 0 1px 4px #0002;
+  font-weight: 600;
+}
+.feedback-timing-options input:focus-visible + span {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.feedback-timing-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  opacity: 0.55;
+  font-size: 10px;
+}
+.feedback-timing-popover .feedback-timing-note {
+  font-size: 11px;
+  margin: 14px 0 10px;
+}
+.feedback-timing-done {
+  display: block;
+  margin-inline-start: auto;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  padding: 5px 12px;
+  font: inherit;
+  cursor: pointer;
+}
