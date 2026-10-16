@@ -17,6 +17,10 @@ This repository builds **Synapse**, a desktop dictation app based on [Handy](htt
 - **Compact guidance:** important parts and up to three improvements appear side by side. Guidance uses a short coach prompt, bounded transcript context, and a 300-token output budget; the final rewrite keeps its separate instructions. The footer shows provider-reported input/output tokens and reasoning details when available, for the last successful response only. Failed requests may still consume tokens.
 - **Your credentials:** use your own provider keys. Deepgram keys stay in memory; AI provider keys use Handy's existing local settings storage. Do not commit settings, recordings, keys, or transcripts.
 
+### Install and update
+
+Download the installer matching your OS and processor from [this fork's Releases](https://github.com/Crobatair/handy/releases). Read the installation table and platform notes in [RELEASE-NOTES.md](RELEASE-NOTES.md). Updates currently mean downloading a newer installer and installing over the existing app; the upstream auto-updater is disabled. Preview builds are not Apple notarized or Windows code-signed.
+
 ### Build this fork
 
 Install Bun, Rust, and the platform requirements in [BUILD.md](BUILD.md), then run:

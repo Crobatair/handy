@@ -1,0 +1,265 @@
+name: Desktop release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+  CARGO_BUILD_JOBS: "2"
+  CMAKE_BUILD_PARALLEL_LEVEL: "2"
+  APPIMAGE_EXTRACT_AND_RUN: "1"
+  LINUXDEPLOY_EXCLUDED_LIBRARIES: "libvulkan.so*;libwayland-client.so*"
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - name: macos-x64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: dmg
+          - name: windows-x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+          - name: windows-arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            bundles: nsis
+          - name: linux-x64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,rpm,appimage
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            bundles: deb,rpm,appimage
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+          key: release-${{ matrix.target }}
+          cache-on-failure: true
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang libclang-dev libevdev-dev pkg-config libssl-dev libasound2-dev libopenblas-dev libx11-dev libxtst-dev libxrandr-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libgtk-layer-shell0 libgtk-layer-shell-dev patchelf cmake libvulkan-dev glslc glslang-tools spirv-headers xdg-utils xvfb
+      - name: Current linuxdeploy
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          arch="$(uname -m)"
+          tools_dir="$HOME/.cache/tauri"
+          mkdir -p "$tools_dir"
+          curl --fail --retry 3 -L "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-${arch}.AppImage" -o "$tools_dir/linuxdeploy-${arch}.AppImage"
+          chmod +x "$tools_dir/linuxdeploy-${arch}.AppImage"
+      - name: Windows compiler environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ startsWith(matrix.target, 'aarch64') && 'arm64' || 'x64' }}
+      - name: Vulkan SDK for Windows x64
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: 1.4.309.0
+          cache: true
+      - name: Configure cmake for ARM64 (Windows)
+        if: runner.os == 'Windows' && startsWith(matrix.target, 'aarch64')
+        shell: pwsh
+        run: |
+          echo "CMAKE_GENERATOR=Ninja" >> $env:GITHUB_ENV
+          echo "CC=clang-cl" >> $env:GITHUB_ENV
+          echo "CXX=clang-cl" >> $env:GITHUB_ENV
+          echo "CMAKE_C_COMPILER=clang-cl" >> $env:GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER=clang-cl" >> $env:GITHUB_ENV
+          echo "CMAKE_C_COMPILER_TARGET=aarch64-pc-windows-msvc" >> $env:GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_TARGET=aarch64-pc-windows-msvc" >> $env:GITHUB_ENV
+          echo "CL=/EHsc" >> $env:GITHUB_ENV
+          # Link uses lld-link + llvm-mt; use llvm-rc for resources too. Microsoft's
+          # rc.exe fails the manifest with "RC2136" under this clang-cl/lld toolchain
+          # (seen in ggml-vulkan's vulkan-shaders-gen host sub-build). CMake honors
+          # the RC env var, and the ExternalProject sub-build inherits it.
+          echo "RC=llvm-rc" >> $env:GITHUB_ENV
+          # Two ARM-static CMake overrides, forwarded by src-tauri/build.rs to the
+          # transcribe-cpp-sys configure via TRANSCRIBE_CMAKE_ARGS (applied AFTER
+          # the crate's own -D's, so ours win):
+          #
+          #   GGML_NATIVE=OFF  — only the dynamic-backends path force-sets this; a
+          #     plain static build inherits ggml's default GGML_NATIVE=ON
+          #     (= -mcpu=native), tuning the binary to THIS runner's CPU — a
+          #     distribution hazard. Pin OFF for a portable ARM baseline.
+          #
+          #   GGML_OPENMP=OFF  — transcribe-cpp-sys force-sets GGML_OPENMP=ON on
+          #     Windows, assuming MSVC auto-links vcomp via the /openmp pragma. But
+          #     ARM builds with clang-cl, whose /openmp emits LLVM-OMP refs
+          #     (__kmpc_*/omp_*) with no auto-linked runtime, so the static final
+          #     link fails with LNK2019 unresolved externals. The crate's CENTRAL
+          #     POLICY notes ggml's non-OpenMP barrier only deadlocks under MSVC
+          #     *codegen* ("works on every other compiler"), and clang-cl is LLVM
+          #     codegen — so disabling OpenMP is safe here and avoids shipping or
+          #     statically linking libomp.
+          echo "TRANSCRIBE_CMAKE_ARGS=-DGGML_NATIVE=OFF -DGGML_OPENMP=OFF" >> $env:GITHUB_ENV
+
+      # Bundle the VC++ runtime app-local so Handy starts on machines without a
+      # current Microsoft redistributable. build.rs stages DLLs from these dirs
+      # into transcribe-libs/, using the same VS install that compiled the code.
+      # x64 also needs vcomp140.dll for ggml OpenMP; ARM64 disables OpenMP.
+      - name: Locate VC++ runtime redist for app-local bundling (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsRoot = & $vswhere -latest -products * -property installationPath
+          if (-not $vsRoot) { throw "vswhere found no Visual Studio installation" }
+          $versionFile = Join-Path $vsRoot "VC\Auxiliary\Build\Microsoft.VCRedistVersion.default.txt"
+          $redistVersion = (Get-Content $versionFile).Trim()
+          $arch = if ("${{ matrix.target }}" -like "aarch64*") { "arm64" } else { "x64" }
+          $archDir = Join-Path $vsRoot "VC\Redist\MSVC\$redistVersion\$arch"
+          if (-not (Test-Path $archDir)) { throw "VC++ redist arch dir not found: $archDir" }
+          # Glob the VC generation folder; the runtime DLL names stay ABI-stable.
+          $crt = Get-ChildItem $archDir -Directory -Filter "Microsoft.VC*.CRT" |
+            Sort-Object Name | Select-Object -Last 1
+          if (-not $crt -or -not (Test-Path (Join-Path $crt.FullName "msvcp140.dll"))) {
+            throw "VC++ CRT redist dir not found or incomplete under: $archDir"
+          }
+          $dirs = $crt.FullName
+          if ($arch -eq "x64") {
+            $omp = Get-ChildItem $archDir -Directory -Filter "Microsoft.VC*.OpenMP" |
+              Sort-Object Name | Select-Object -Last 1
+            if (-not $omp -or -not (Test-Path (Join-Path $omp.FullName "vcomp140.dll"))) {
+              throw "VC++ OpenMP redist dir not found or incomplete under: $archDir"
+            }
+            $dirs = "$($crt.FullName);$($omp.FullName)"
+          }
+          Write-Host "HANDY_VC_REDIST_DIRS=$dirs"
+          Add-Content -Path $env:GITHUB_ENV -Value "HANDY_VC_REDIST_DIRS=$dirs"
+
+      # MSI packaging verifies bundled .dll/.exe resources with signtool before
+      # custom signing. Tauri's SDK lookup has no ARM64 host mapping, so pass
+      # the tool explicitly once ARM64 starts bundling runtime DLLs.
+      - name: Install ONNX Runtime (x86_64 macOS)
+        if: matrix.target == 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          ORT_VERSION="1.24.2"
+          curl --fail --retry 3 -L -o ort.tgz "https://blob.handy.computer/onnxruntime-osx-x86_64-${ORT_VERSION}.tgz"
+          tar xzf ort.tgz
+          ORT_DIR="$(pwd)/onnxruntime-osx-x86_64-${ORT_VERSION}"
+          echo "ORT_LIB_LOCATION=$ORT_DIR/lib" >> $GITHUB_ENV
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> $GITHUB_ENV
+          # Bundle the versioned dylib (matches the install name @rpath/libonnxruntime.1.24.2.dylib)
+          jq --arg lib "$ORT_DIR/lib/libonnxruntime.${ORT_VERSION}.dylib" \
+            '.bundle.macOS.frameworks = [$lib]' \
+            src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
+
+      - name: Install ONNX Runtime (Windows x64)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ORT_VERSION = "1.24.2"
+          $url = "https://github.com/microsoft/onnxruntime/releases/download/v$ORT_VERSION/onnxruntime-win-x64-$ORT_VERSION.zip"
+          Invoke-WebRequest -Uri $url -OutFile ort.zip
+          Expand-Archive -Path ort.zip -DestinationPath ort-dist -Force
+          $ortLib = (Resolve-Path "ort-dist/onnxruntime-win-x64-$ORT_VERSION/lib").Path
+          Write-Host "ORT_LIB_LOCATION=$ortLib"
+          Add-Content -Path $env:GITHUB_ENV -Value "ORT_LIB_LOCATION=$ortLib"
+          Add-Content -Path $env:GITHUB_ENV -Value "ORT_PREFER_DYNAMIC_LINK=1"
+
+      - name: Install SPIRV-Headers for transcribe-cpp Vulkan build (Windows x64)
+        if: runner.os == 'Windows' && !startsWith(matrix.target, 'aarch64')
+        shell: pwsh
+        run: |
+          vcpkg install spirv-headers:x64-windows
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg install spirv-headers failed" }
+          $prefix = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows" -replace '\\','/'
+          $combined = if ($env:CMAKE_PREFIX_PATH) { "$prefix;$env:CMAKE_PREFIX_PATH" } else { $prefix }
+          Add-Content $env:GITHUB_ENV "CMAKE_PREFIX_PATH=$combined"
+          Write-Host "CMAKE_PREFIX_PATH=$combined"
+
+      - name: Frontend dependencies
+        shell: bash
+        run: bun install --frozen-lockfile
+      - name: Locate Linux runtime libraries
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          bun run build
+          (cd src-tauri && cargo build --release --target "$TARGET")
+          LIBDIR="$(find "src-tauri/target/$TARGET/release/build" -type f -name transcribe-link.json -path '*transcribe-cpp-sys*/out/lib/*' -printf '%T@ %h\n' | sort -rn | head -1 | cut -d' ' -f2-)"
+          test -n "$LIBDIR"
+          LIBDIR="$(cd "$LIBDIR" && pwd)"
+          echo "LD_LIBRARY_PATH=$LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+          sudo cp -vL "$LIBDIR"/libtranscribe.so* "$LIBDIR"/libggml*.so* /usr/local/lib/
+          sudo ldconfig
+      - name: Build installers
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          BUNDLES: ${{ matrix.bundles }}
+          APPLE_SIGNING_IDENTITY: "-"
+        run: bun run tauri build --target "$TARGET" --bundles "$BUNDLES"
+      - name: Collect installers
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          PLATFORM: ${{ matrix.name }}
+        run: python scripts/collect-release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.name }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: release-assets
+      - name: Validate artifacts and write checksums
+        run: python scripts/verify-release.py
+      - name: Publish preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(python -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+          TAG="v$VERSION"
+          if gh release view "$TAG" --json isDraft > release-state.json 2>/dev/null; then
+            python -c 'import json; assert json.load(open("release-state.json"))["isDraft"], "Refusing to overwrite an existing public release; bump the version"'
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --draft --title "Synapse $VERSION — desktop preview" --notes-file RELEASE-NOTES.md
+          fi
+          gh release upload "$TAG" release-assets/* --clobber
+          gh release edit "$TAG" --draft=false --prerelease
