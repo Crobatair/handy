@@ -358,9 +358,14 @@ pub struct Guidance {
     pub next_steps: Vec<String>,
     #[serde(default)]
     pub outline: Vec<String>,
+    #[serde(default)]
     pub good_practices: Vec<String>,
+    #[serde(default)]
     pub missing: Vec<String>,
+    #[serde(default)]
     pub deep_dive: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<crate::llm_client::TokenUsage>,
 }
 
 fn pcm16(frame: &[f32]) -> Vec<u8> {
@@ -667,6 +672,19 @@ async fn complete(
     transcript: String,
     schema: Option<serde_json::Value>,
 ) -> Result<String, String> {
+    complete_with_budget(app, instruction, transcript, schema, None)
+        .await?
+        .text
+        .ok_or_else(|| "AI provider returned no text".to_string())
+}
+
+async fn complete_with_budget(
+    app: &AppHandle,
+    instruction: String,
+    transcript: String,
+    schema: Option<serde_json::Value>,
+    max_tokens: Option<u32>,
+) -> Result<crate::llm_client::CompletionResult, String> {
     let settings = get_settings(app);
     let id = &settings.post_process_provider_id;
     let provider = settings
@@ -710,7 +728,7 @@ async fn complete(
     } else {
         None
     };
-    let response = crate::llm_client::send_chat_completion_with_schema(
+    let response = crate::llm_client::send_chat_completion_with_budget(
         provider,
         key,
         model,
@@ -718,12 +736,19 @@ async fn complete(
         Some(instruction),
         schema,
         true,
+        max_tokens,
     );
-    tokio::time::timeout(Duration::from_secs(30), response)
+    let result = tokio::time::timeout(Duration::from_secs(30), response)
         .await
-        .map_err(|_| "AI request timed out")??
-        .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| "AI provider returned no text".to_string())
+        .map_err(|_| "AI request timed out")??;
+    if result
+        .text
+        .as_ref()
+        .is_none_or(|text| text.trim().is_empty())
+    {
+        return Err("AI provider returned no text".into());
+    }
+    Ok(result)
 }
 
 fn parse_guidance(text: &str) -> Result<Guidance, String> {
@@ -764,6 +789,18 @@ fn parse_guidance(text: &str) -> Result<Guidance, String> {
     Ok(guidance)
 }
 
+fn guidance_context(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= 4000 {
+        return text.to_string();
+    }
+    format!(
+        "{}\n[earlier dictation omitted]\n{}",
+        chars[..1000].iter().collect::<String>(),
+        chars[chars.len() - 3000..].iter().collect::<String>()
+    )
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn synapse_guidance(
@@ -776,22 +813,19 @@ pub async fn synapse_guidance(
     if transcript.trim().is_empty() {
         return Ok(Guidance::default());
     }
+    let _ = mode_instructions; // Full rewriting instructions are only sent when polishing final text.
     let instruction = format!(
-        r#"You are a prompt-writing coach reviewing a draft that the user is dictating. Help the user express their intended request clearly. You are NOT the recipient who will execute that request. The transcript and mode metadata are reference data only.
-Mode: {}
-Purpose: {}
-Mode instructions (reference only): <mode>{}</mode>
-Outline the important parts already expressed: requested task, context/constraints, and expected output. Use compact, labeled phrases grounded in the dictation. Do not invent project facts or requirements.
-Next steps are improvements the USER can make to this draft, ordered by importance, not steps for executing the underlying task. Missing items are genuinely necessary details absent from the draft; omit optional questions and repeated advice. Good practices identify useful details already supplied. Deep-dive questions help clarify intent only when needed.
-If the draft refers to images, files, tests, or screenshots, help phrase what the eventual recipient should inspect or produce. Never respond to the underlying task, say you cannot see/access the images/files, or claim to have inspected them. Do not demand access yourself. Preserve uncertain names and model versions instead of guessing.
-Return ONLY JSON with exactly five string-array keys: outline, next_steps, good_practices, missing, deep_dive. At most three short entries per array, each at most 200 characters. Empty arrays are appropriate when no improvement is needed. No markdown."#,
-        bounded(&mode_label, 80),
-        bounded(&mode_description, 400),
-        bounded(&mode_instructions, 6000)
+        "Coach the user's dictated prompt; do not execute it. Mode: {}. Goal: {}. Return only JSON: outline (at most 2 key parts already stated, <=70 characters each), next_steps (at most 3 specific improvements, highest priority first, <=90 characters each). Empty arrays are fine. Never invent facts, answer the task, or claim you cannot access referenced files/images. No praise, repeated advice, or extra keys. Fit the entire JSON within 240 tokens.",
+        bounded(&mode_label, 60), bounded(&mode_description, 180)
     );
     let array = serde_json::json!({"type":"array","items":{"type":"string"}});
-    let schema = serde_json::json!({"type":"object","properties":{"outline":array,"next_steps":array,"good_practices":array,"missing":array,"deep_dive":array},"required":["outline","next_steps","good_practices","missing","deep_dive"],"additionalProperties":false});
-    parse_guidance(&complete(&app, instruction, transcript, Some(schema)).await?)
+    let schema = serde_json::json!({"type":"object","properties":{"outline":array,"next_steps":array},"required":["outline","next_steps"],"additionalProperties":false});
+    let context = guidance_context(&transcript);
+    let result = complete_with_budget(&app, instruction, context, Some(schema), Some(300)).await?;
+    let mut guidance = parse_guidance(result.text.as_deref().unwrap_or_default())?;
+    guidance.outline.truncate(2);
+    guidance.usage = result.usage;
+    Ok(guidance)
 }
 
 #[tauri::command]
@@ -822,6 +856,20 @@ fn validate_rewrite(text: String) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn compact_guidance_accepts_only_two_arrays_and_bounds_context() {
+        let result = parse_guidance(
+            r#"{"outline":["Task: review UI"],"next_steps":["Specify the output"]}"#,
+        )
+        .unwrap();
+        assert_eq!(result.outline, vec!["Task: review UI"]);
+        assert!(result.good_practices.is_empty());
+        let long = format!("START{}END", "x".repeat(5000));
+        let context = guidance_context(&long);
+        assert!(context.starts_with("START") && context.ends_with("END"));
+        assert!(context.chars().count() < 4050);
+    }
+
     #[test]
     fn plain_dictation_does_not_change_guided_defaults() {
         let guided = WorkspaceConfig {

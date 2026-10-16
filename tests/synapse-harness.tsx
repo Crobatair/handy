@@ -116,6 +116,11 @@ const controls = {
     }),
   resolve: () =>
     resolveGuidance?.({
+      usage: {
+        input_tokens: 220,
+        output_tokens: 95,
+        completion_tokens_details: { reasoning_tokens: 20 },
+      },
       outline: ["Task: review the interface.", "Output: specific changes."],
       next_steps: ["Confirm the audience.", "Choose the output format."],
       good_practices: ["You stated a concrete task."],

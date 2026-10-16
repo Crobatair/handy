@@ -271,3 +271,40 @@ test("authentication rejection pauses requests without stopping dictation", asyn
     page.getByRole("button", { name: "Stop recording" }),
   ).toBeVisible();
 });
+
+test("compact guidance shows cards side by side and reported token usage", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 560, height: 360 });
+  await page.goto("/tests/synapse-overlay.html");
+  await page.evaluate(() => {
+    (window as any).synapseTest.shortcutStart();
+    (window as any).synapseTest.emit(
+      "Review this interface and propose specific changes.",
+    );
+  });
+  await page.clock.fastForward(30_000);
+  await expect(page.getByText("Updating…", { exact: true })).toBeVisible();
+  await page.evaluate(() => (window as any).synapseTest.resolve());
+  const left = await page
+    .getByRole("region", {
+      name: "Important parts of your request",
+      exact: true,
+    })
+    .boundingBox();
+  const right = await page
+    .getByRole("region", {
+      name: "Improve your request · highest priority first",
+      exact: true,
+    })
+    .boundingBox();
+  expect(Math.abs(left!.y - right!.y)).toBeLessThan(2);
+  expect(right!.x).toBeGreaterThan(left!.x + left!.width);
+  await expect(
+    page.getByText("Last response · Input 220 · Output 95 tokens", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText(/20 reasoning · 75 visible/)).toBeVisible();
+  await page.screenshot({ path: "artifacts/compact-guidance.png" });
+});

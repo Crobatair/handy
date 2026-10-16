@@ -1,3 +1,4 @@
+import { GuidanceCards } from "@/components/synapse/GuidanceCards";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -926,39 +927,12 @@ export default function SynapseWorkspace({
               )}
             </div>
             <p className="mt-1 text-xs text-mid-gray">{mode.label}</p>
-            {(
-              [
-                "outline",
-                "next_steps",
-                "missing",
-                "deep_dive",
-                "good_practices",
-              ] as const
-            ).map((category) =>
-              guidance?.[category]?.length ? (
-                <div key={category} className="mt-4">
-                  <h3 className="text-sm font-medium">
-                    {t(`synapse.guidance.${category}`)}
-                  </h3>
-                  <ol className="mt-2 list-decimal space-y-2 ps-4 text-sm text-mid-gray">
-                    {guidance[category]!.map((item, index) => (
-                      <li key={index}>{item}</li>
-                    ))}
-                  </ol>
-                </div>
-              ) : null,
-            )}
+            {guidance && <GuidanceCards guidance={guidance} />}
             {!guidance && (
               <p className="mt-5 text-sm text-mid-gray">
                 {t("synapse.guidanceHint", { seconds: guidanceInterval })}
               </p>
             )}
-            {guidance &&
-              !Object.values(guidance).some((items) => items?.length) && (
-                <p className="mt-5 text-sm text-mid-gray">
-                  {t("synapse.noGuidance")}
-                </p>
-              )}
             {guidanceError && (
               <p role="alert" className="mt-4 text-sm text-red-400">
                 {guidanceError}

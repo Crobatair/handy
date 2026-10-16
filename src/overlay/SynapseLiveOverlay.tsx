@@ -1,3 +1,4 @@
+import { GuidanceCards } from "@/components/synapse/GuidanceCards";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -283,9 +284,12 @@ export default function SynapseLiveOverlay({
             onClick={() => {
               const selection = window.getSelection()?.toString();
               const feedback = guidance
-                ? Object.entries(guidance)
-                    .flatMap(([, items]) => items || [])
-                    .join("\n")
+                ? [
+                    ...(guidance.outline || []),
+                    ...(guidance.next_steps || []),
+                    ...guidance.missing,
+                    ...guidance.deep_dive,
+                  ].join("\n")
                 : "";
               if (selection || feedback)
                 void api
@@ -335,26 +339,7 @@ export default function SynapseLiveOverlay({
             {t("synapse.liveGuidance")}
             {busy && <span>{t("synapse.updating")}</span>}
           </h2>
-          {(
-            [
-              "outline",
-              "next_steps",
-              "missing",
-              "deep_dive",
-              "good_practices",
-            ] as const
-          ).map((category) =>
-            guidance?.[category]?.length ? (
-              <div className="sf-guidance-group" key={category}>
-                <h3>{t(`synapse.guidance.${category}`)}</h3>
-                <ol style={{ listStyleType: "decimal", paddingLeft: 18 }}>
-                  {guidance[category]!.map((item, index) => (
-                    <li key={index}>{item}</li>
-                  ))}
-                </ol>
-              </div>
-            ) : null,
-          )}
+          {guidance && <GuidanceCards guidance={guidance} />}
           {!guidance && (
             <p>
               {t(enabled ? "synapse.guidanceHint" : "synapse.overlayDisabled", {

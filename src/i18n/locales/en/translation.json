@@ -859,6 +859,14 @@
       "15": "Balanced",
       "30": "Calm",
       "60": "Quiet"
-    }
+    },
+    "outlineWaiting": "The key parts will appear as you add detail.",
+    "tokenUsage": "Last response · Input {{input}} · Output {{output}} tokens",
+    "reasoningUsage_one": "{{count}} reasoning",
+    "reasoningUsage_other": "{{count}} reasoning",
+    "visibleUsage_one": "{{count}} visible",
+    "visibleUsage_other": "{{count}} visible",
+    "usageUnavailable": "Token usage not reported by the provider.",
+    "usageNote": "Provider-reported usage for the last successful guidance response. Reasoning is included in output, not added to it. Failed requests may also consume tokens."
   }
 }

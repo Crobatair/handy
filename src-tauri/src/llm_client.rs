@@ -116,12 +116,34 @@ struct ChatCompletionRequest {
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<ResponseFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
     #[serde(flatten)]
     reasoning: ReasoningParams,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Default, PartialEq)]
+pub struct TokenUsage {
+    #[serde(alias = "prompt_tokens")]
+    pub input_tokens: Option<u64>,
+    #[serde(alias = "completion_tokens")]
+    pub output_tokens: Option<u64>,
+    #[serde(alias = "output_tokens_details")]
+    pub completion_tokens_details: Option<OutputTokenDetails>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, PartialEq)]
+pub struct OutputTokenDetails {
+    pub reasoning_tokens: Option<u64>,
+}
+#[derive(Debug)]
+pub struct CompletionResult {
+    pub text: Option<String>,
+    pub usage: Option<TokenUsage>,
+}
+
 #[derive(Debug, Deserialize)]
 struct ChatCompletionResponse {
+    usage: Option<TokenUsage>,
     choices: Vec<ChatChoice>,
 }
 
@@ -151,6 +173,7 @@ struct AnthropicMessagesRequest {
 
 #[derive(Debug, Deserialize)]
 struct AnthropicMessagesResponse {
+    usage: Option<TokenUsage>,
     content: Vec<AnthropicContentBlock>,
     stop_reason: Option<String>,
 }
@@ -387,8 +410,40 @@ pub async fn send_chat_completion_with_schema(
     json_schema: Option<Value>,
     disable_reasoning: bool,
 ) -> Result<Option<String>, String> {
+    Ok(send_chat_completion_with_budget(
+        provider,
+        api_key,
+        model,
+        user_content,
+        system_prompt,
+        json_schema,
+        disable_reasoning,
+        None,
+    )
+    .await?
+    .text)
+}
+
+pub async fn send_chat_completion_with_budget(
+    provider: &PostProcessProvider,
+    api_key: String,
+    model: &str,
+    user_content: String,
+    system_prompt: Option<String>,
+    json_schema: Option<Value>,
+    disable_reasoning: bool,
+    max_tokens: Option<u32>,
+) -> Result<CompletionResult, String> {
     if provider.api_format == PostProcessApiFormat::Anthropic {
-        return send_anthropic_message(provider, api_key, model, user_content, system_prompt).await;
+        return send_anthropic_with_budget(
+            provider,
+            api_key,
+            model,
+            user_content,
+            system_prompt,
+            max_tokens,
+        )
+        .await;
     }
     let base_url = provider.base_url.trim_end_matches('/');
     let url = format!("{}/chat/completions", base_url);
@@ -439,6 +494,7 @@ pub async fn send_chat_completion_with_schema(
         messages,
         stream: false,
         response_format,
+        max_tokens,
         reasoning,
     };
 
@@ -514,7 +570,10 @@ pub async fn send_chat_completion_with_schema(
         .map_err(|e| report_reqwest_error("Failed to parse API response", &e))?;
 
     let Some(choice) = completion.choices.into_iter().next() else {
-        return Ok(None);
+        return Ok(CompletionResult {
+            text: None,
+            usage: completion.usage,
+        });
     };
 
     // A response cut off at the provider's output limit is incomplete; pasting
@@ -524,7 +583,10 @@ pub async fn send_chat_completion_with_schema(
         return Err("Response was truncated at the provider's output token limit".to_string());
     }
 
-    Ok(choice.message.content)
+    Ok(CompletionResult {
+        text: choice.message.content,
+        usage: completion.usage,
+    })
 }
 
 /// Send a single-prompt request to an Anthropic Messages API (`/messages`).
@@ -539,6 +601,21 @@ async fn send_anthropic_message(
     prompt: String,
     system: Option<String>,
 ) -> Result<Option<String>, String> {
+    Ok(
+        send_anthropic_with_budget(provider, api_key, model, prompt, system, None)
+            .await?
+            .text,
+    )
+}
+
+async fn send_anthropic_with_budget(
+    provider: &PostProcessProvider,
+    api_key: String,
+    model: &str,
+    prompt: String,
+    system: Option<String>,
+    max_tokens: Option<u32>,
+) -> Result<CompletionResult, String> {
     let url = format!("{}/messages", provider.base_url.trim_end_matches('/'));
 
     debug!(
@@ -549,7 +626,7 @@ async fn send_anthropic_message(
     let request_body = AnthropicMessagesRequest {
         system,
         model: model.to_string(),
-        max_tokens: ANTHROPIC_MAX_TOKENS,
+        max_tokens: max_tokens.unwrap_or(ANTHROPIC_MAX_TOKENS),
         messages: vec![ChatMessage {
             role: "user".to_string(),
             content: prompt,
@@ -594,11 +671,15 @@ async fn send_anthropic_message(
     if message.stop_reason.as_deref() == Some("max_tokens") {
         return Err(format!(
             "Response was truncated at the {} token limit",
-            ANTHROPIC_MAX_TOKENS
+            max_tokens.unwrap_or(ANTHROPIC_MAX_TOKENS)
         ));
     }
 
-    Ok(message.into_text())
+    let usage = message.usage.clone();
+    Ok(CompletionResult {
+        text: message.into_text(),
+        usage,
+    })
 }
 
 /// Fetch available models from an OpenAI-compatible API
@@ -724,6 +805,7 @@ mod tests {
             }],
             stream: false,
             response_format: None,
+            max_tokens: None,
             reasoning,
         };
         serde_json::to_value(&request).unwrap()
@@ -745,6 +827,68 @@ mod tests {
         });
 
         format!("http://{address}")
+    }
+
+    #[tokio::test]
+    async fn guidance_budget_is_sent_and_usage_is_preserved() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (sent, received) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut data = Vec::new();
+            loop {
+                let mut chunk = [0u8; 2048];
+                let size = stream.read(&mut chunk).await.unwrap();
+                assert!(size > 0);
+                data.extend_from_slice(&chunk[..size]);
+                if let Some(end) = data.windows(4).position(|window| window == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&data[..end]).to_lowercase();
+                    let length: usize = headers
+                        .lines()
+                        .find_map(|line| line.strip_prefix("content-length:"))
+                        .unwrap()
+                        .trim()
+                        .parse()
+                        .unwrap();
+                    if data.len() >= end + 4 + length {
+                        let body: Value =
+                            serde_json::from_slice(&data[end + 4..end + 4 + length]).unwrap();
+                        let _ = sent.send(body);
+                        break;
+                    }
+                }
+            }
+            let body = r#"{"choices":[{"message":{"content":"{}"},"finish_reason":"stop"}],"usage":{"prompt_tokens":220,"completion_tokens":95,"completion_tokens_details":{"reasoning_tokens":20}}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let result = send_chat_completion_with_budget(
+            &provider("openrouter", &format!("http://{address}")),
+            "test-key".into(),
+            "test-model",
+            "draft".into(),
+            Some("coach".into()),
+            None,
+            true,
+            Some(300),
+        )
+        .await
+        .unwrap();
+        let request = received.await.unwrap();
+        assert_eq!(request["max_tokens"], 300);
+        assert_eq!(request["reasoning"]["effort"], "none");
+        let usage = result.usage.unwrap();
+        assert_eq!(usage.input_tokens, Some(220));
+        assert_eq!(usage.output_tokens, Some(95));
+        assert_eq!(
+            usage.completion_tokens_details.unwrap().reasoning_tokens,
+            Some(20)
+        );
     }
 
     #[tokio::test]

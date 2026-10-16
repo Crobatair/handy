@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+export type TokenUsage = {
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  completion_tokens_details?: { reasoning_tokens?: number | null } | null;
+};
 export type Guidance = {
+  usage?: TokenUsage | null;
   outline?: string[];
   next_steps?: string[];
   good_practices: string[];

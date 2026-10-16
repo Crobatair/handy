@@ -14,6 +14,7 @@ This repository builds **Synapse**, a desktop dictation app based on [Handy](htt
 - **Guided dictation** offers selectable task instructions, transcript rewriting, and a floating prompt-writing guide. Choose a mode and AI provider under Advanced → Live dictation settings.
 - **Local or cloud speech:** use a downloaded local model or opt into Deepgram. Cloud speech sends audio to the selected service; cloud guidance/rewriting sends text and supplied context to the selected AI provider. Choose a localhost language-model endpoint for fully local operation.
 - **Feedback timing:** select 5, 10, 15, 30, or 60 seconds in the guide's title bar or settings. Unchanged spoken words do not trigger another request. Pausing affects the current session.
+- **Compact guidance:** important parts and up to three improvements appear side by side. Guidance uses a short coach prompt, bounded transcript context, and a 300-token output budget; the final rewrite keeps its separate instructions. The footer shows provider-reported input/output tokens and reasoning details when available, for the last successful response only. Failed requests may still consume tokens.
 - **Your credentials:** use your own provider keys. Deepgram keys stay in memory; AI provider keys use Handy's existing local settings storage. Do not commit settings, recordings, keys, or transcripts.
 
 ### Build this fork

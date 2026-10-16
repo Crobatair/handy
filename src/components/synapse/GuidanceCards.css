@@ -1,0 +1,42 @@
+.guidance-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.guidance-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-logo-primary) 4%, transparent);
+}
+.guidance-card h3 {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+.guidance-card ol {
+  list-style: decimal;
+  margin: 0;
+  padding-inline-start: 17px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.guidance-card li + li {
+  margin-top: 8px;
+}
+.guidance-card p {
+  font-size: 12px;
+  opacity: 0.6;
+  margin: 0;
+  line-height: 1.5;
+}
+.guidance-usage {
+  margin: 10px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
