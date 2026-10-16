@@ -7,10 +7,7 @@ Handy-based dictation with local speech models, optional Deepgram, task modes, a
 | Computer                          | File                                      |
 | --------------------------------- | ----------------------------------------- |
 | Mac with Apple Silicon (M-series) | `macos-arm64.dmg`                         |
-| Mac with Intel processor          | `macos-x64.dmg`                           |
-| Windows on Intel/AMD              | `windows-x64-setup.exe`                   |
 | Windows on ARM (e.g. Snapdragon)  | `windows-arm64-setup.exe`                 |
-| Linux on Intel/AMD                | `linux-x64.deb`, `.rpm`, or `.AppImage`   |
 | Linux on ARM64                    | `linux-arm64.deb`, `.rpm`, or `.AppImage` |
 
 The full filenames start with `Synapse_0.10.0_`. `SHA256SUMS.txt` contains checksums for all ten installers. GitHub's Source code archives are not installers.

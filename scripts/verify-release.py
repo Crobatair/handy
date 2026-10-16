@@ -7,7 +7,7 @@ version = json.loads(Path("src-tauri/tauri.conf.json").read_text())["version"]
 root = Path("release-assets")
 expected = []
 for platform, extensions in {
-    "macos-arm64": [".dmg"], "macos-x64": [".dmg"],
+    "macos-arm64": [".dmg"],
     "windows-x64": ["-setup.exe"], "windows-arm64": ["-setup.exe"],
     "linux-x64": [".deb", ".rpm", ".AppImage"],
     "linux-arm64": [".deb", ".rpm", ".AppImage"],
